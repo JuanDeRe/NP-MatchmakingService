@@ -8,5 +8,8 @@
   <ItemGroup>
   <Compile Remove="test\**\*.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include=".github\workflows\ci.yml" />
+  </ItemGroup>
 
 </Project>

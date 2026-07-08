@@ -1,5 +1,7 @@
 # Nightwatch Protocol - MatchmakingService
 
+https://github.com/JuanDeRe/NP-MatchmakingService/actions/workflows/ci.yml/badge.svg](https://github.com/JuanDeRe/NP-MatchmakingService/actions/workflows/ci.yml)
+
 `MatchmakingService` es el servicio encargado de administrar la cola de jugadores y crear partidas para Nightwatch Protocol.
 
 Este servicio recibe solicitudes de jugadores que quieren entrar a una partida, los mantiene en una cola temporal y, cuando hay suficientes jugadores disponibles, solicita al `GameService` la creación de una nueva partida. Luego guarda la asignación de cada jugador con su `matchId`, `role` y `gameServiceId`.
