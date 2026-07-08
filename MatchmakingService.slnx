@@ -1,3 +1,6 @@
 <Solution>
+  <Folder Name="/test/">
+    <Project Path="test/MatchmakingService.Tests/MatchmakingService.Tests.csproj" />
+  </Folder>
   <Project Path="MatchmakingService.csproj" />
 </Solution>

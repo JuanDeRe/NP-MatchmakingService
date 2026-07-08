@@ -3,6 +3,9 @@ using MatchmakingService.Models;
 
 namespace MatchmakingService.Stores;
 
+/// <summary>
+/// Temporary in-memory storage for queued players and match assignments.
+/// </summary>
 public class InMemoryMatchmakingStore : IMatchmakingStore
 {
     private readonly object _syncRoot = new();

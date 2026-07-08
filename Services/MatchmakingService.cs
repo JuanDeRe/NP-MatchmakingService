@@ -7,6 +7,9 @@ using Microsoft.Extensions.Options;
 
 namespace MatchmakingService.Services;
 
+/// <summary>
+/// Coordinates player queueing and match creation.
+/// </summary>
 public class MatchmakingService : IMatchmakingService
 {
     private readonly IMatchmakingStore _store;
@@ -65,7 +68,7 @@ public class MatchmakingService : IMatchmakingService
 
         if (createMatchResponse is null)
         {
-            // Si GameService falla, devolvemos los jugadores a cola para no perderlos.
+            // If match creation fails, players return to the queue.
             foreach (var player in playersForMatch)
             {
                 _store.Enqueue(player);
@@ -124,6 +127,17 @@ public class MatchmakingService : IMatchmakingService
             PlayerId = playerId,
             Status = "NotQueued"
         };
+    }
+
+    public IReadOnlyCollection<QueuedPlayerResponse> GetQueue()
+    {
+        return _store.GetQueuedPlayers()
+            .Select(player => new QueuedPlayerResponse
+            {
+                PlayerId = player.PlayerId,
+                JoinedAtUtc = player.JoinedAtUtc
+            })
+            .ToList();
     }
 
     private static CreateMatchRequest BuildCreateMatchRequest(List<QueuedPlayer> players)

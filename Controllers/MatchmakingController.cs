@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MatchmakingService.Controllers;
 
+/// <summary>
+/// Exposes matchmaking endpoints for queueing and match assignment.
+/// </summary>
 [ApiController]
 [Route("matchmaking")]
 public class MatchmakingController : ControllerBase
@@ -38,5 +41,13 @@ public class MatchmakingController : ControllerBase
         var response = _matchmakingService.GetStatus(playerId);
 
         return Ok(response);
+    }
+
+    [HttpGet("queue")]
+    public ActionResult<IReadOnlyCollection<QueuedPlayerResponse>> GetQueue()
+    {
+        var queue = _matchmakingService.GetQueue();
+
+        return Ok(queue);
     }
 }
