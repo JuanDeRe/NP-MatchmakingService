@@ -92,9 +92,7 @@ public class MatchmakingService : IMatchmakingService
             _store.SaveAssignment(assignment);
         }
 
-        var currentPlayerAssignment = assignments.First(a => a.PlayerId == request.PlayerId);
-
-        return BuildAssignedResponse(currentPlayerAssignment);
+        return BuildResponseForCurrentPlayer(request.PlayerId, assignments);
     }
 
     public MatchmakingStatusResponse GetStatus(string playerId)
@@ -188,5 +186,23 @@ public class MatchmakingService : IMatchmakingService
             GameServiceId = assignment.GameServiceId,
             Role = assignment.Role.ToString()
         };
+    }
+    private static JoinQueueResponse BuildResponseForCurrentPlayer(
+        string currentPlayerId,
+        List<PlayerMatchAssignment> assignments)
+    {
+        var currentPlayerAssignment = assignments
+            .FirstOrDefault(a => a.PlayerId == currentPlayerId);
+
+        if (currentPlayerAssignment is null)
+        {
+            return new JoinQueueResponse
+            {
+                Status = QueueStatus.Queued.ToString(),
+                Message = "Player added to queue. A previous group was assigned first."
+            };
+        }
+
+        return BuildAssignedResponse(currentPlayerAssignment);
     }
 }

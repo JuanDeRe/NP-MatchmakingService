@@ -5,6 +5,9 @@ using Microsoft.Extensions.Options;
 
 namespace MatchmakingService.Clients;
 
+/// <summary>
+/// HTTP client used to request match creation from GameService.
+/// </summary>
 public class GameServiceClient : IGameServiceClient
 {
     private readonly HttpClient _httpClient;
@@ -20,15 +23,26 @@ public class GameServiceClient : IGameServiceClient
 
     public async Task<CreateMatchResponse?> CreateMatchAsync(CreateMatchRequest request)
     {
-        var url = $"{_options.BaseUrl}/game/matches";
+        try
+        {
+            var url = $"{_options.BaseUrl}/game/matches";
 
-        var response = await _httpClient.PostAsJsonAsync(url, request);
+            var response = await _httpClient.PostAsJsonAsync(url, request);
 
-        if (!response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<CreateMatchResponse>();
+        }
+        catch (HttpRequestException)
         {
             return null;
         }
-
-        return await response.Content.ReadFromJsonAsync<CreateMatchResponse>();
+        catch (TaskCanceledException)
+        {
+            return null;
+        }
     }
 }

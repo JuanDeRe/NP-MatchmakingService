@@ -150,4 +150,35 @@ public class MatchmakingServiceTests
         Assert.Equal(QueueStatus.Queued.ToString(), response.Status);
         Assert.Equal(2, queue.Count);
     }
+    [Fact]
+    public async Task JoinQueue_Should_Keep_Current_Player_Queued_When_Previous_Group_Is_Assigned()
+    {
+        var service = CreateService(new FailOnceGameServiceClient());
+
+        await service.JoinQueueAsync(new JoinQueueRequest
+        {
+            PlayerId = "player-001"
+        });
+
+        await service.JoinQueueAsync(new JoinQueueRequest
+        {
+            PlayerId = "player-002"
+        });
+
+        var response = await service.JoinQueueAsync(new JoinQueueRequest
+        {
+            PlayerId = "player-003"
+        });
+
+        var player001Status = service.GetStatus("player-001");
+        var player002Status = service.GetStatus("player-002");
+        var player003Status = service.GetStatus("player-003");
+
+        Assert.Equal(QueueStatus.Assigned.ToString(), player001Status.Status);
+        Assert.Equal(QueueStatus.Assigned.ToString(), player002Status.Status);
+        Assert.Equal(QueueStatus.Queued.ToString(), player003Status.Status);
+
+        Assert.Equal(QueueStatus.Queued.ToString(), response.Status);
+        Assert.Null(response.MatchId);
+    }
 }
