@@ -11,4 +11,14 @@ public class MatchmakingStatusResponse
     public string? GameServiceId { get; set; }
 
     public string? Role { get; set; }
+
+    public string? AnimatronicType { get; set; }
+
+    public string? InviteCode { get; set; }
+
+    public int CurrentPlayers { get; set; }
+
+    public int MaxPlayers { get; set; }
+
+    public DateTime? CountdownEndsAtUtc { get; set; }
 }

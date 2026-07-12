@@ -168,4 +168,16 @@ public class InMemoryMatchmakingStore : IMatchmakingStore
             .ToString("N")[..6]
             .ToUpperInvariant();
     }
+    public WaitingRoom? GetWaitingRoomByPlayerId(string playerId)
+    {
+        lock (_syncRoot)
+        {
+            var room = _waitingRooms.FirstOrDefault(room =>
+                room.Status != WaitingRoomStatus.MatchCreated &&
+                room.Players.Any(player => player.PlayerId == playerId)
+            );
+
+            return room is null ? null : CloneRoom(room);
+        }
+    }
 }

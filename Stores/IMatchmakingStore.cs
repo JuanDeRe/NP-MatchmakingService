@@ -23,4 +23,6 @@ public interface IMatchmakingStore
     void SaveAssignment(PlayerMatchAssignment assignment);
 
     PlayerMatchAssignment? GetAssignment(string playerId);
+    
+    WaitingRoom? GetWaitingRoomByPlayerId(string playerId);
 }

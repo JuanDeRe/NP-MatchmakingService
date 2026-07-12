@@ -109,16 +109,31 @@ public class MatchmakingService : IMatchmakingService
                 Status = QueueStatus.Assigned.ToString(),
                 MatchId = assignment.MatchId,
                 GameServiceId = assignment.GameServiceId,
-                Role = assignment.Role.ToString()
+                Role = assignment.Role.ToString(),
+                AnimatronicType = assignment.AnimatronicType.ToString()
             };
         }
 
-        if (_store.IsPlayerWaiting(playerId))
+        var room = _store.GetWaitingRoomByPlayerId(playerId);
+
+        if (room is not null)
         {
+            DateTime? countdownEndsAtUtc = null;
+
+            if (room.CountdownStartedAtUtc is not null)
+            {
+                countdownEndsAtUtc = room.CountdownStartedAtUtc.Value
+                    .AddSeconds(_options.CountdownSeconds);
+            }
+
             return new MatchmakingStatusResponse
             {
                 PlayerId = playerId,
-                Status = QueueStatus.Queued.ToString()
+                Status = QueueStatus.Queued.ToString(),
+                InviteCode = room.InviteCode,
+                CurrentPlayers = room.Players.Count,
+                MaxPlayers = _options.MaxPlayersPerMatch,
+                CountdownEndsAtUtc = countdownEndsAtUtc
             };
         }
 
