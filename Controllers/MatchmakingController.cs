@@ -1,11 +1,11 @@
 ﻿using MatchmakingService.Contracts;
 using MatchmakingService.Services;
 using Microsoft.AspNetCore.Mvc;
-
+using MatchmakingService.Exceptions;
 namespace MatchmakingService.Controllers;
 
 /// <summary>
-/// Exposes matchmaking endpoints for queueing and match assignment.
+/// Exposes matchmaking endpoints for waiting rooms and match assignment.
 /// </summary>
 [ApiController]
 [Route("matchmaking")]
@@ -43,11 +43,45 @@ public class MatchmakingController : ControllerBase
         return Ok(response);
     }
 
-    [HttpGet("queue")]
-    public ActionResult<IReadOnlyCollection<QueuedPlayerResponse>> GetQueue()
+    [HttpGet("rooms")]
+    public ActionResult<IReadOnlyCollection<WaitingRoomResponse>> GetWaitingRooms()
     {
-        var queue = _matchmakingService.GetQueue();
+        var rooms = _matchmakingService.GetWaitingRooms();
 
-        return Ok(queue);
+        return Ok(rooms);
+    }
+
+    [HttpPost("process-waiting-rooms")]
+    public async Task<ActionResult<ProcessWaitingRoomsResponse>> ProcessWaitingRooms()
+    {
+        var response = await _matchmakingService.ProcessWaitingRoomsAsync();
+
+        return Ok(response);
+    }
+    
+    [HttpPost("rooms/join-by-code")]
+    public async Task<ActionResult<JoinQueueResponse>> JoinRoomByCode(
+        [FromBody] JoinRoomByCodeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PlayerId))
+        {
+            return BadRequest(new
+            {
+                message = "PlayerId is required."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.InviteCode))
+        {
+            return BadRequest(new
+            {
+                message = "InviteCode is required."
+            });
+        }
+
+        var response = await _matchmakingService
+            .JoinRoomByCodeAsync(request);
+
+        return Ok(response);
     }
 }

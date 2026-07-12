@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
+using MatchmakingService.BackgroundServices;
 using MatchmakingService.Clients;
 using MatchmakingService.Configuration;
+using MatchmakingService.ExceptionHandlers;
 using MatchmakingService.Services;
 using MatchmakingService.Stores;
 
@@ -27,7 +29,14 @@ builder.Services.AddHttpClient<IGameServiceClient, GameServiceClient>();
 
 builder.Services.AddScoped<IMatchmakingService, MatchmakingService.Services.MatchmakingService>();
 
+builder.Services.AddHostedService<WaitingRoomProcessor>();
+
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 app.MapControllers();
 

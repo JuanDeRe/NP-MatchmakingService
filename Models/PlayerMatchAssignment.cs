@@ -11,4 +11,6 @@ public class PlayerMatchAssignment
     public PlayerRole Role { get; set; }
 
     public DateTime AssignedAtUtc { get; set; } = DateTime.UtcNow;
+    
+    public AnimatronicType AnimatronicType { get; set; } = AnimatronicType.None;
 }

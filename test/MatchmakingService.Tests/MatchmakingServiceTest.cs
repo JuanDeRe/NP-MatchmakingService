@@ -1,6 +1,7 @@
 ﻿using MatchmakingService.Clients;
 using MatchmakingService.Configuration;
 using MatchmakingService.Contracts;
+using MatchmakingService.Exceptions;
 using MatchmakingService.Models;
 using MatchmakingService.Services;
 using MatchmakingService.Stores;
@@ -17,7 +18,8 @@ public class MatchmakingServiceTests
         var options = Options.Create(new MatchmakingOptions
         {
             MinPlayersPerMatch = 2,
-            MaxPlayersPerMatch = 5
+            MaxPlayersPerMatch = 5,
+            CountdownSeconds = 0
         });
 
         return new Services.MatchmakingService(
@@ -42,28 +44,35 @@ public class MatchmakingServiceTests
     }
 
     [Fact]
-    public async Task JoinQueue_Should_Create_Match_When_Enough_Players()
+    public async Task ProcessWaitingRooms_Should_Create_Match_When_Countdown_Has_Expired()
     {
         var service = CreateService();
-
+    
         await service.JoinQueueAsync(new JoinQueueRequest
         {
             PlayerId = "player-001"
         });
-
-        var response = await service.JoinQueueAsync(new JoinQueueRequest
+    
+        var secondJoinResponse = await service.JoinQueueAsync(new JoinQueueRequest
         {
             PlayerId = "player-002"
         });
-
-        Assert.Equal(QueueStatus.Assigned.ToString(), response.Status);
-        Assert.Equal("match-test", response.MatchId);
-        Assert.Equal("game-service-local", response.GameServiceId);
-        Assert.Equal(PlayerRole.Animatronic.ToString(), response.Role);
+    
+        Assert.Equal(QueueStatus.Queued.ToString(), secondJoinResponse.Status);
+    
+        var processResponse = await service.ProcessWaitingRoomsAsync();
+    
+        var player002Status = service.GetStatus("player-002");
+    
+        Assert.Equal(1, processResponse.MatchesCreated);
+        Assert.Equal(QueueStatus.Assigned.ToString(), player002Status.Status);
+        Assert.Equal("match-test", player002Status.MatchId);
+        Assert.Equal("game-service-local", player002Status.GameServiceId);
+        Assert.Equal(PlayerRole.Animatronic.ToString(), player002Status.Role);
     }
 
     [Fact]
-    public async Task GetStatus_Should_Return_Assignment_For_First_Player()
+    public async Task GetStatus_Should_Return_Assignment_For_First_Player_After_Room_Is_Processed()
     {
         var service = CreateService();
 
@@ -76,6 +85,8 @@ public class MatchmakingServiceTests
         {
             PlayerId = "player-002"
         });
+
+        await service.ProcessWaitingRoomsAsync();
 
         var status = service.GetStatus("player-001");
 
@@ -99,10 +110,11 @@ public class MatchmakingServiceTests
             PlayerId = "player-001"
         });
 
-        var queue = service.GetQueue();
+        var rooms = service.GetWaitingRooms();
 
         Assert.Equal(QueueStatus.Queued.ToString(), response.Status);
-        Assert.Single(queue);
+        Assert.Single(rooms);
+        Assert.Equal(1, rooms.First().CurrentPlayers);
     }
 
     [Fact]
@@ -120,6 +132,8 @@ public class MatchmakingServiceTests
             PlayerId = "player-002"
         });
 
+        await service.ProcessWaitingRoomsAsync();
+
         var response = await service.JoinQueueAsync(new JoinQueueRequest
         {
             PlayerId = "player-001"
@@ -131,7 +145,7 @@ public class MatchmakingServiceTests
     }
 
     [Fact]
-    public async Task JoinQueue_Should_Return_Players_To_Queue_When_GameService_Fails()
+    public async Task ProcessWaitingRooms_Should_Keep_Players_Waiting_When_GameService_Fails()
     {
         var service = CreateService(new FakeGameServiceClient(shouldFail: true));
 
@@ -140,20 +154,24 @@ public class MatchmakingServiceTests
             PlayerId = "player-001"
         });
 
-        var response = await service.JoinQueueAsync(new JoinQueueRequest
+        await service.JoinQueueAsync(new JoinQueueRequest
         {
             PlayerId = "player-002"
         });
 
-        var queue = service.GetQueue();
+        var processResponse = await service.ProcessWaitingRoomsAsync();
 
-        Assert.Equal(QueueStatus.Queued.ToString(), response.Status);
-        Assert.Equal(2, queue.Count);
+        var rooms = service.GetWaitingRooms();
+
+        Assert.Equal(0, processResponse.MatchesCreated);
+        Assert.Single(rooms);
+        Assert.Equal(2, rooms.First().CurrentPlayers);
+        Assert.Equal(WaitingRoomStatus.CountdownStarted.ToString(), rooms.First().Status);
     }
     [Fact]
-    public async Task JoinQueue_Should_Keep_Current_Player_Queued_When_Previous_Group_Is_Assigned()
+    public async Task JoinQueue_Should_Add_Third_Player_To_Same_Waiting_Room_Before_Match_Is_Created()
     {
-        var service = CreateService(new FailOnceGameServiceClient());
+        var service = CreateService();
 
         await service.JoinQueueAsync(new JoinQueueRequest
         {
@@ -165,20 +183,60 @@ public class MatchmakingServiceTests
             PlayerId = "player-002"
         });
 
-        var response = await service.JoinQueueAsync(new JoinQueueRequest
+        var thirdResponse = await service.JoinQueueAsync(new JoinQueueRequest
         {
             PlayerId = "player-003"
         });
 
-        var player001Status = service.GetStatus("player-001");
-        var player002Status = service.GetStatus("player-002");
-        var player003Status = service.GetStatus("player-003");
+        var rooms = service.GetWaitingRooms();
 
-        Assert.Equal(QueueStatus.Assigned.ToString(), player001Status.Status);
-        Assert.Equal(QueueStatus.Assigned.ToString(), player002Status.Status);
-        Assert.Equal(QueueStatus.Queued.ToString(), player003Status.Status);
+        Assert.Equal(QueueStatus.Queued.ToString(), thirdResponse.Status);
+        Assert.Single(rooms);
+        Assert.Equal(3, rooms.First().CurrentPlayers);
+        Assert.Equal(WaitingRoomStatus.CountdownStarted.ToString(), rooms.First().Status);
+    }
+    [Fact]
+    public async Task JoinRoomByCode_Should_Add_Player_To_Existing_Room()
+    {
+        var service = CreateService();
+
+        await service.JoinQueueAsync(new JoinQueueRequest
+        {
+            PlayerId = "player-001"
+        });
+
+        var room = Assert.Single(service.GetWaitingRooms());
+
+        var response = await service.JoinRoomByCodeAsync(
+            new JoinRoomByCodeRequest
+            {
+                PlayerId = "player-002",
+                InviteCode = room.InviteCode
+            }
+        );
+
+        var updatedRoom = Assert.Single(service.GetWaitingRooms());
 
         Assert.Equal(QueueStatus.Queued.ToString(), response.Status);
-        Assert.Null(response.MatchId);
+        Assert.Equal(2, updatedRoom.CurrentPlayers);
+        Assert.Equal(
+            WaitingRoomStatus.CountdownStarted.ToString(),
+            updatedRoom.Status
+        );
+    }
+    [Fact]
+    public async Task JoinRoomByCode_Should_Throw_When_Code_Does_Not_Exist()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<WaitingRoomNotFoundException>(() =>
+            service.JoinRoomByCodeAsync(
+                new JoinRoomByCodeRequest
+                {
+                    PlayerId = "player-002",
+                    InviteCode = "INVALID"
+                }
+            )
+        );
     }
 }

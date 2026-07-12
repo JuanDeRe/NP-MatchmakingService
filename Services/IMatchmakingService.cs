@@ -8,5 +8,11 @@ public interface IMatchmakingService
 
     MatchmakingStatusResponse GetStatus(string playerId);
 
-    IReadOnlyCollection<QueuedPlayerResponse> GetQueue();
+    IReadOnlyCollection<WaitingRoomResponse> GetWaitingRooms();
+
+    Task<ProcessWaitingRoomsResponse> ProcessWaitingRoomsAsync();
+    Task<JoinQueueResponse> JoinRoomByCodeAsync(
+            JoinRoomByCodeRequest request
+        );
+        
 }

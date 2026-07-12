@@ -4,13 +4,21 @@ namespace MatchmakingService.Stores;
 
 public interface IMatchmakingStore
 {
-    void Enqueue(QueuedPlayer player);
+    WaitingRoom GetOrCreateOpenRoom(int maxPlayers);
 
-    IReadOnlyCollection<QueuedPlayer> GetQueuedPlayers();
+    WaitingRoom? GetRoomByInviteCode(string inviteCode);
 
-    List<QueuedPlayer> TakePlayersForMatch(int amount);
+    IReadOnlyCollection<WaitingRoom> GetWaitingRooms();
 
-    bool IsPlayerQueued(string playerId);
+    bool AddPlayerToRoom(
+        string roomId,
+        QueuedPlayer player,
+        int maxPlayers
+    );
+    
+    bool IsPlayerWaiting(string playerId);
+
+    void UpdateRoom(WaitingRoom room);
 
     void SaveAssignment(PlayerMatchAssignment assignment);
 
