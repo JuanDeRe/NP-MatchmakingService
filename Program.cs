@@ -34,7 +34,20 @@ builder.Services.AddHostedService<WaitingRoomProcessor>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("UnityWebClient", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
+
+app.UseCors("UnityWebClient");
 
 app.UseExceptionHandler();
 
