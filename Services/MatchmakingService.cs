@@ -379,7 +379,8 @@ public class MatchmakingService : IMatchmakingService
             .ToList();
     }
 
-    private static JoinQueueResponse BuildAssignedResponse(PlayerMatchAssignment assignment)
+    private static JoinQueueResponse BuildAssignedResponse(
+        PlayerMatchAssignment assignment)
     {
         return new JoinQueueResponse
         {
@@ -387,7 +388,8 @@ public class MatchmakingService : IMatchmakingService
             Message = "Player assigned to match",
             MatchId = assignment.MatchId,
             GameServiceId = assignment.GameServiceId,
-            Role = assignment.Role.ToString()
+            Role = assignment.Role.ToString(),
+            AnimatronicType = assignment.AnimatronicType.ToString()
         };
     }
     private void StartCountdownIfReady(WaitingRoom room)

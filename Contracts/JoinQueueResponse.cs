@@ -11,4 +11,7 @@ public class JoinQueueResponse
     public string? GameServiceId { get; set; }
 
     public string? Role { get; set; }
+    
+    
+    public string? AnimatronicType { get; set; }
 }
