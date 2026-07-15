@@ -5,7 +5,8 @@ using MatchmakingService.Configuration;
 using MatchmakingService.ExceptionHandlers;
 using MatchmakingService.Services;
 using MatchmakingService.Stores;
-
+using MatchmakingService.Configuration;
+using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<GameServiceOptions>(
@@ -44,6 +45,28 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod();
     });
 });
+builder.Services.Configure<RedisOptions>(
+    builder.Configuration.GetSection("Redis")
+);
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(
+    serviceProvider =>
+    {
+        var configuration =
+            serviceProvider
+                .GetRequiredService<
+                    Microsoft.Extensions.Options.IOptions<
+                        RedisOptions
+                    >
+                >()
+                .Value;
+
+        return ConnectionMultiplexer.Connect(
+            configuration.ConnectionString
+        );
+    }
+);
+builder.Services.AddHostedService<MatchFinishedSubscriber>();
 
 var app = builder.Build();
 

@@ -180,4 +180,33 @@ public class InMemoryMatchmakingStore : IMatchmakingStore
             return room is null ? null : CloneRoom(room);
         }
     }
+    public bool RemoveAssignment(string playerId)
+    {
+        return _assignments.TryRemove(
+            playerId,
+            out _
+        );
+    }
+
+    public void ResetRoomForFinishedMatch(
+        string matchId)
+    {
+        lock (_syncRoot)
+        {
+            var room = _waitingRooms.FirstOrDefault(
+                room => room.CurrentMatchId == matchId
+            );
+
+            if (room is null)
+            {
+                return;
+            }
+
+            room.CurrentMatchId = null;
+            room.Status =
+                WaitingRoomStatus.WaitingForPlayers;
+
+            room.CountdownStartedAtUtc = null;
+        }
+    }
 }

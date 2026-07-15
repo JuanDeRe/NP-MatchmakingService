@@ -25,4 +25,8 @@ public interface IMatchmakingStore
     PlayerMatchAssignment? GetAssignment(string playerId);
     
     WaitingRoom? GetWaitingRoomByPlayerId(string playerId);
+    
+    bool RemoveAssignment(string playerId);
+
+    void ResetRoomForFinishedMatch(string matchId);
 }
