@@ -5,8 +5,8 @@ using MatchmakingService.Configuration;
 using MatchmakingService.ExceptionHandlers;
 using MatchmakingService.Services;
 using MatchmakingService.Stores;
-using MatchmakingService.Configuration;
 using StackExchange.Redis;
+using MatchmakingService.Registry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,7 +30,15 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-builder.Services.AddSingleton<IMatchmakingStore, InMemoryMatchmakingStore>();
+builder.Services.AddSingleton<
+    IMatchmakingStore,
+    RedisMatchmakingStore
+>();
+
+builder.Services.AddSingleton<
+    IGameServiceRegistry,
+    RedisGameServiceRegistry
+>();
 
 builder.Services.AddHttpClient<IGameServiceClient, GameServiceClient>();
 
@@ -60,24 +68,6 @@ builder.Services.Configure<RedisOptions>(
 builder.Services.AddSingleton<IConnectionMultiplexer>(
     serviceProvider =>
     {
-        var configuration =
-            serviceProvider
-                .GetRequiredService<
-                    Microsoft.Extensions.Options.IOptions<
-                        RedisOptions
-                    >
-                >()
-                .Value;
-
-        return ConnectionMultiplexer.Connect(
-            configuration.ConnectionString
-        );
-    }
-);
-
-builder.Services.AddSingleton<IConnectionMultiplexer>(
-    serviceProvider =>
-    {
         var redisOptions = serviceProvider
             .GetRequiredService<
                 Microsoft.Extensions.Options.IOptions<
@@ -101,7 +91,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(
     }
 );
 
-
+builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 app.UseCors("UnityWebClient");
@@ -111,5 +101,5 @@ app.UseExceptionHandler();
 app.MapControllers();
 
 app.MapGet("/", () => "Nightwatch Protocol - MatchmakingService running");
-
+app.MapHealthChecks("/health");
 app.Run();

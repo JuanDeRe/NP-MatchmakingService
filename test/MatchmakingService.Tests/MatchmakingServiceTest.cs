@@ -3,6 +3,7 @@ using MatchmakingService.Configuration;
 using MatchmakingService.Contracts;
 using MatchmakingService.Exceptions;
 using MatchmakingService.Models;
+using MatchmakingService.Registry;
 using MatchmakingService.Services;
 using MatchmakingService.Stores;
 using Microsoft.Extensions.Options;
@@ -13,19 +14,126 @@ namespace MatchmakingService.Tests;
 public class MatchmakingServiceTests
 {
     private static Services.MatchmakingService CreateService(
-        IGameServiceClient? gameServiceClient = null)
+        IGameServiceClient? gameServiceClient = null,
+        IGameServiceRegistry? gameServiceRegistry = null)
     {
-        var options = Options.Create(new MatchmakingOptions
-        {
-            MinPlayersPerMatch = 2,
-            MaxPlayersPerMatch = 5,
-            CountdownSeconds = 0
-        });
+        var options = Options.Create(
+            new MatchmakingOptions
+            {
+                MinPlayersPerMatch = 2,
+                MaxPlayersPerMatch = 5,
+                CountdownSeconds = 0
+            }
+        );
 
         return new Services.MatchmakingService(
             new InMemoryMatchmakingStore(),
-            gameServiceClient ?? new FakeGameServiceClient(),
+
+            gameServiceClient ??
+            new FakeGameServiceClient(),
+
+            gameServiceRegistry ??
+            new FakeGameServiceRegistry(),
+
             options
+        );
+    }
+    [Fact]
+    public async Task ProcessWaitingRooms_Should_Keep_Players_Waiting_When_No_GameService_Is_Available()
+    {
+        var registry =
+            new FakeGameServiceRegistry(
+                hasAvailableInstance: false
+            );
+
+        var service = CreateService(
+            gameServiceRegistry: registry
+        );
+
+        await service.JoinQueueAsync(
+            new JoinQueueRequest
+            {
+                PlayerId = "player-001"
+            }
+        );
+
+        await service.JoinQueueAsync(
+            new JoinQueueRequest
+            {
+                PlayerId = "player-002"
+            }
+        );
+
+        var processResponse =
+            await service.ProcessWaitingRoomsAsync();
+
+        var rooms = service.GetWaitingRooms();
+
+        Assert.Equal(
+            0,
+            processResponse.MatchesCreated
+        );
+
+        Assert.Single(rooms);
+
+        Assert.Equal(
+            2,
+            rooms.First().CurrentPlayers
+        );
+
+        Assert.Equal(
+            WaitingRoomStatus.CountdownStarted
+                .ToString(),
+
+            rooms.First().Status
+        );
+    }
+    
+    [Fact]
+    public async Task ProcessWaitingRooms_Should_Save_Match_Route()
+    {
+        var registry =
+            new FakeGameServiceRegistry();
+
+        var service = CreateService(
+            gameServiceRegistry: registry
+        );
+
+        await service.JoinQueueAsync(
+            new JoinQueueRequest
+            {
+                PlayerId = "player-001"
+            }
+        );
+
+        await service.JoinQueueAsync(
+            new JoinQueueRequest
+            {
+                PlayerId = "player-002"
+            }
+        );
+
+        await service.ProcessWaitingRoomsAsync();
+
+        var route = registry.GetMatchRoute(
+            "match-test"
+        );
+
+        Assert.NotNull(route);
+
+        Assert.Equal(
+            "match-test",
+            route.MatchId
+        );
+
+        Assert.Equal(
+            "game-service-local",
+            route.GameServiceId
+        );
+
+        Assert.Equal(
+            "http://localhost:5002",
+            route.InternalUrl
         );
     }
 

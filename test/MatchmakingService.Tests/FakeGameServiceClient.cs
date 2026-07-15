@@ -26,4 +26,9 @@ public class FakeGameServiceClient : IGameServiceClient
             Status = "Active"
         });
     }
+
+    public Task<CreateMatchResponse?> CreateMatchAsync(CreateMatchRequest request, string gameServiceBaseUrl)
+    {
+        throw new NotImplementedException();
+    }
 }

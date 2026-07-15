@@ -5,6 +5,7 @@ using MatchmakingService.Models;
 using MatchmakingService.Stores;
 using Microsoft.Extensions.Options;
 using MatchmakingService.Exceptions;
+using MatchmakingService.Registry;
 
 namespace MatchmakingService.Services;
 
@@ -24,14 +25,17 @@ public class MatchmakingService : IMatchmakingService
     private readonly IMatchmakingStore _store;
     private readonly IGameServiceClient _gameServiceClient;
     private readonly MatchmakingOptions _options;
+    private readonly IGameServiceRegistry _gameServiceRegistry;
 
     public MatchmakingService(
         IMatchmakingStore store,
         IGameServiceClient gameServiceClient,
+        IGameServiceRegistry gameServiceRegistry,
         IOptions<MatchmakingOptions> options)
     {
         _store = store;
         _gameServiceClient = gameServiceClient;
+        _gameServiceRegistry = gameServiceRegistry;
         _options = options.Value;
     }
 
@@ -273,57 +277,110 @@ public class MatchmakingService : IMatchmakingService
     }
 
     private async Task<JoinQueueResponse?> CreateMatchFromRoomAsync(
-        WaitingRoom room,
-        string? requestingPlayerId)
+    WaitingRoom room,
+    string? requestingPlayerId)
+{
+    var createMatchRequest =
+        BuildCreateMatchRequest(room.Players);
+
+    var gameServiceInstance =
+        _gameServiceRegistry.FindAvailableInstance();
+
+    if (gameServiceInstance is null)
     {
-        var createMatchRequest = BuildCreateMatchRequest(room.Players);
+        return null;
+    }
 
-        var createMatchResponse = await _gameServiceClient.CreateMatchAsync(createMatchRequest);
-
-        if (createMatchResponse is null)
-        {
-            return null;
-        }
-
-        var assignments = AssignPlayers(
-            room.Players,
+    var createMatchResponse =
+        await _gameServiceClient.CreateMatchAsync(
             createMatchRequest,
-            createMatchResponse
+            gameServiceInstance.InternalUrl
         );
 
-        foreach (var assignment in assignments)
-        {
-            _store.SaveAssignment(assignment);
-        }
-
-        room.Status = WaitingRoomStatus.MatchCreated;
-        _store.UpdateRoom(room);
-
-        if (requestingPlayerId is null)
-        {
-            return new JoinQueueResponse
-            {
-                Status = QueueStatus.Assigned.ToString(),
-                Message = "Match created",
-                MatchId = createMatchResponse.MatchId,
-                GameServiceId = createMatchResponse.GameServiceId
-            };
-        }
-
-        var currentPlayerAssignment = assignments
-            .FirstOrDefault(assignment => assignment.PlayerId == requestingPlayerId);
-
-        if (currentPlayerAssignment is null)
-        {
-            return new JoinQueueResponse
-            {
-                Status = QueueStatus.Queued.ToString(),
-                Message = "Player added to waiting room. Another group was assigned first."
-            };
-        }
-
-        return BuildAssignedResponse(currentPlayerAssignment);
+    if (createMatchResponse is null ||
+        string.IsNullOrWhiteSpace(
+            createMatchResponse.MatchId))
+    {
+        return null;
     }
+
+    // Registra en Redis qué instancia posee la partida.
+    _gameServiceRegistry.SaveMatchRoute(
+        new MatchRoute
+        {
+            MatchId = createMatchResponse.MatchId,
+
+            GameServiceId =
+                gameServiceInstance.InstanceId,
+
+            InternalUrl =
+                gameServiceInstance.InternalUrl,
+
+            CreatedAtUtc = DateTime.UtcNow
+        }
+    );
+
+    var assignments = AssignPlayers(
+        room.Players,
+        createMatchRequest,
+        createMatchResponse.MatchId,
+        gameServiceInstance.InstanceId
+    );
+
+    foreach (var assignment in assignments)
+    {
+        _store.SaveAssignment(assignment);
+    }
+
+    room.CurrentMatchId =
+        createMatchResponse.MatchId;
+
+    room.Status =
+        WaitingRoomStatus.MatchCreated;
+
+    _store.UpdateRoom(room);
+
+    if (requestingPlayerId is null)
+    {
+        return new JoinQueueResponse
+        {
+            Status =
+                QueueStatus.Assigned.ToString(),
+
+            Message = "Match created",
+
+            MatchId =
+                createMatchResponse.MatchId,
+
+            GameServiceId =
+                gameServiceInstance.InstanceId
+        };
+    }
+
+    var currentPlayerAssignment =
+        assignments.FirstOrDefault(
+            assignment =>
+                assignment.PlayerId ==
+                requestingPlayerId
+        );
+
+    if (currentPlayerAssignment is null)
+    {
+        return new JoinQueueResponse
+        {
+            Status =
+                QueueStatus.Queued.ToString(),
+
+            Message =
+                "Player added to waiting room. " +
+                "Another group was assigned first."
+        };
+    }
+
+    return BuildAssignedResponse(
+        currentPlayerAssignment
+    );
+}
 
     private static CreateMatchRequest BuildCreateMatchRequest(
         List<QueuedPlayer> players)
@@ -359,21 +416,34 @@ public class MatchmakingService : IMatchmakingService
     private static List<PlayerMatchAssignment> AssignPlayers(
         List<QueuedPlayer> queuedPlayers,
         CreateMatchRequest createMatchRequest,
-        CreateMatchResponse createMatchResponse)
+        string matchId,
+        string gameServiceInstanceId)
     {
         return queuedPlayers
             .Select(player =>
             {
-                var matchPlayer = createMatchRequest.Players
-                    .First(p => p.PlayerId == player.PlayerId);
+                var matchPlayer =
+                    createMatchRequest.Players.First(
+                        requestPlayer =>
+                            requestPlayer.PlayerId ==
+                            player.PlayerId
+                    );
 
                 return new PlayerMatchAssignment
                 {
                     PlayerId = player.PlayerId,
-                    MatchId = createMatchResponse.MatchId,
-                    GameServiceId = createMatchResponse.GameServiceId,
+
+                    MatchId = matchId,
+
+                    GameServiceId =
+                        gameServiceInstanceId,
+
                     Role = matchPlayer.Role,
-                    AnimatronicType = matchPlayer.AnimatronicType
+
+                    AnimatronicType =
+                        matchPlayer.AnimatronicType,
+
+                    AssignedAtUtc = DateTime.UtcNow
                 };
             })
             .ToList();

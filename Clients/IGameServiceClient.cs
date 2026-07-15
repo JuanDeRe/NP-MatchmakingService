@@ -4,5 +4,8 @@ namespace MatchmakingService.Clients;
 
 public interface IGameServiceClient
 {
-    Task<CreateMatchResponse?> CreateMatchAsync(CreateMatchRequest request);
+    Task<CreateMatchResponse?> CreateMatchAsync(
+        CreateMatchRequest request,
+        string gameServiceBaseUrl
+    );
 }
