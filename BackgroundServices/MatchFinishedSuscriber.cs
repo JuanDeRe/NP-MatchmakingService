@@ -11,8 +11,10 @@ namespace MatchmakingService.BackgroundServices;
 public class MatchFinishedSubscriber
     : BackgroundService
 {
-    private const string MatchFinishedChannel =
-        "nightwatch:events:match-finished";
+    private static readonly RedisChannel Channel =
+        RedisChannel.Literal(
+            "nightwatch:events:match-finished"
+        );
 
     private readonly IConnectionMultiplexer _redis;
     private readonly IMatchmakingStore _store;
@@ -35,69 +37,81 @@ public class MatchFinishedSubscriber
         var subscriber = _redis.GetSubscriber();
 
         await subscriber.SubscribeAsync(
-            RedisChannel.Literal(
-                MatchFinishedChannel
-            ),
-            async (_, value) =>
-            {
-                try
-                {
-                    var matchFinishedEvent =
-                        JsonSerializer.Deserialize<
-                            MatchFinishedEvent
-                        >(value.ToString());
+            Channel,
+            HandleMessage
+        );
 
-                    if (matchFinishedEvent is null)
-                    {
-                        return;
-                    }
-
-                    foreach (var playerId in
-                             matchFinishedEvent.PlayerIds)
-                    {
-                        _store.RemoveAssignment(
-                            playerId
-                        );
-                    }
-
-                    _store.ResetRoomForFinishedMatch(
-                        matchFinishedEvent.MatchId
-                    );
-
-                    _logger.LogInformation(
-                        "Released players for finished " +
-                        "match {MatchId}",
-                        matchFinishedEvent.MatchId
-                    );
-
-                    await Task.CompletedTask;
-                }
-                catch (Exception exception)
-                {
-                    _logger.LogError(
-                        exception,
-                        "Failed to process MatchFinished event"
-                    );
-                }
-            }
+        _logger.LogInformation(
+            "Subscribed to Redis channel {Channel}",
+            Channel.ToString()
         );
 
         try
         {
             await Task.Delay(
-                Timeout.Infinite,
+                Timeout.InfiniteTimeSpan,
                 stoppingToken
             );
         }
         catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
         {
-            // Normal application shutdown.
+            // Cierre normal de la aplicación.
         }
+        finally
+        {
+            await subscriber.UnsubscribeAsync(
+                Channel,
+                HandleMessage
+            );
+        }
+    }
 
-        await subscriber.UnsubscribeAsync(
-            RedisChannel.Literal(
-                MatchFinishedChannel
-            )
-        );
+    private void HandleMessage(
+        RedisChannel channel,
+        RedisValue value)
+    {
+        try
+        {
+            var matchFinishedEvent =
+                JsonSerializer.Deserialize<
+                    MatchFinishedEvent
+                >(value.ToString());
+
+            if (matchFinishedEvent is null)
+            {
+                _logger.LogWarning(
+                    "Received an invalid MatchFinished event"
+                );
+
+                return;
+            }
+
+            foreach (var playerId in
+                     matchFinishedEvent.PlayerIds)
+            {
+                _store.RemoveAssignment(playerId);
+            }
+
+            _store.ResetRoomForFinishedMatch(
+                matchFinishedEvent.MatchId
+            );
+
+            _logger.LogInformation(
+                "Released {PlayerCount} players from " +
+                "finished match {MatchId}",
+                matchFinishedEvent.PlayerIds.Count,
+                matchFinishedEvent.MatchId
+            );
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Failed to process MatchFinished event " +
+                "from channel {Channel}",
+                channel.ToString()
+            );
+        }
     }
 }

@@ -7,7 +7,13 @@ using MatchmakingService.Services;
 using MatchmakingService.Stores;
 using MatchmakingService.Configuration;
 using StackExchange.Redis;
+
 var builder = WebApplication.CreateBuilder(args);
+
+Console.WriteLine(
+    $"Runtime actual: " +
+    $"{System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}"
+);
 
 builder.Services.Configure<GameServiceOptions>(
     builder.Configuration.GetSection("GameService")
@@ -29,7 +35,9 @@ builder.Services.AddSingleton<IMatchmakingStore, InMemoryMatchmakingStore>();
 builder.Services.AddHttpClient<IGameServiceClient, GameServiceClient>();
 
 builder.Services.AddScoped<IMatchmakingService, MatchmakingService.Services.MatchmakingService>();
-
+builder.Services.AddHostedService<
+    MatchEventStreamProcessor
+>();
 builder.Services.AddHostedService<WaitingRoomProcessor>();
 
 builder.Services.AddProblemDetails();
@@ -66,7 +74,33 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(
         );
     }
 );
-builder.Services.AddHostedService<MatchFinishedSubscriber>();
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(
+    serviceProvider =>
+    {
+        var redisOptions = serviceProvider
+            .GetRequiredService<
+                Microsoft.Extensions.Options.IOptions<
+                    RedisOptions
+                >
+            >()
+            .Value;
+
+        var configuration =
+            ConfigurationOptions.Parse(
+                redisOptions.ConnectionString
+            );
+
+        configuration.AbortOnConnectFail = false;
+        configuration.ConnectRetry = 3;
+        configuration.ConnectTimeout = 5000;
+
+        return ConnectionMultiplexer.Connect(
+            configuration
+        );
+    }
+);
+
 
 var app = builder.Build();
 
