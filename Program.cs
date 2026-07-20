@@ -51,15 +51,67 @@ builder.Services.AddHostedService<WaitingRoomProcessor>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
+var allowedOrigins =
+    builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>()
+    ?? Array.Empty<string>();
+
+const string unityClientCorsPolicy =
+    "UnityClientCorsPolicy";
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("UnityWebClient", policy =>
-    {
-        policy
-            .AllowAnyOrigin()
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
+    options.AddPolicy(
+        unityClientCorsPolicy,
+        policy =>
+        {
+            policy
+                .SetIsOriginAllowed(origin =>
+                {
+                    if (string.IsNullOrWhiteSpace(origin))
+                    {
+                        return false;
+                    }
+
+                    if (!Uri.TryCreate(
+                            origin,
+                            UriKind.Absolute,
+                            out var uri))
+                    {
+                        return false;
+                    }
+
+                    var isLocalDevelopment =
+                        uri.Host.Equals(
+                            "localhost",
+                            StringComparison.OrdinalIgnoreCase
+                        ) ||
+                        uri.Host.Equals(
+                            "127.0.0.1",
+                            StringComparison.OrdinalIgnoreCase
+                        );
+
+                    var normalizedOrigin =
+                        origin.TrimEnd('/');
+
+                    var isConfiguredOrigin =
+                        allowedOrigins.Any(
+                            allowedOrigin =>
+                                string.Equals(
+                                    allowedOrigin.TrimEnd('/'),
+                                    normalizedOrigin,
+                                    StringComparison.OrdinalIgnoreCase
+                                )
+                        );
+
+                    return isLocalDevelopment ||
+                           isConfiguredOrigin;
+                })
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+    );
 });
 builder.Services.Configure<RedisOptions>(
     builder.Configuration.GetSection("Redis")
@@ -94,12 +146,14 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(
 builder.Services.AddHealthChecks();
 var app = builder.Build();
 
-app.UseCors("UnityWebClient");
+app.UseRouting();
 
-app.UseExceptionHandler();
+app.UseCors(unityClientCorsPolicy);
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
-
-app.MapGet("/", () => "Nightwatch Protocol - MatchmakingService running");
 app.MapHealthChecks("/health");
+
 app.Run();
