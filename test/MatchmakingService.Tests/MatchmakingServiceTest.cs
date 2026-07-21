@@ -35,7 +35,9 @@ public class MatchmakingServiceTests
             gameServiceRegistry ??
             new FakeGameServiceRegistry(),
 
-            options
+            options,
+            
+            new FakeMatchmakingMetrics()
         );
     }
     [Fact]

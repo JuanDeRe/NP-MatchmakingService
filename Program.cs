@@ -7,6 +7,8 @@ using MatchmakingService.Services;
 using MatchmakingService.Stores;
 using StackExchange.Redis;
 using MatchmakingService.Registry;
+using Amazon.CloudWatch;
+using MatchmakingService.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +24,25 @@ builder.Services.Configure<GameServiceOptions>(
 builder.Services.Configure<MatchmakingOptions>(
     builder.Configuration.GetSection("Matchmaking")
 );
+builder.Services.Configure<
+    MatchmakingMetricsOptions
+>(
+    builder.Configuration.GetSection(
+        MatchmakingMetricsOptions.SectionName
+    )
+);
+builder.Services.AddSingleton<
+    IMatchmakingMetrics,
+    MatchmakingMetrics
+>();
+builder.Services.AddSingleton<
+    IAmazonCloudWatch
+>(
+    _ => new AmazonCloudWatchClient()
+);
+builder.Services.AddHostedService<
+    CloudWatchMatchmakingMetricsPublisher
+>();
 
 builder.Services
     .AddControllers()

@@ -6,6 +6,8 @@ using MatchmakingService.Stores;
 using Microsoft.Extensions.Options;
 using MatchmakingService.Exceptions;
 using MatchmakingService.Registry;
+using System.Diagnostics;
+using MatchmakingService.Observability;
 
 namespace MatchmakingService.Services;
 
@@ -26,17 +28,22 @@ public class MatchmakingService : IMatchmakingService
     private readonly IGameServiceClient _gameServiceClient;
     private readonly MatchmakingOptions _options;
     private readonly IGameServiceRegistry _gameServiceRegistry;
+    private readonly IMatchmakingMetrics _metrics;
 
     public MatchmakingService(
         IMatchmakingStore store,
         IGameServiceClient gameServiceClient,
         IGameServiceRegistry gameServiceRegistry,
-        IOptions<MatchmakingOptions> options)
+        IOptions<MatchmakingOptions> options,
+        IMatchmakingMetrics metrics)
     {
         _store = store;
-        _gameServiceClient = gameServiceClient;
-        _gameServiceRegistry = gameServiceRegistry;
+        _gameServiceClient =
+            gameServiceClient;
+        _gameServiceRegistry =
+            gameServiceRegistry;
         _options = options.Value;
+        _metrics = metrics;
     }
 
     public async Task<JoinQueueResponse> JoinQueueAsync(JoinQueueRequest request)
@@ -288,19 +295,43 @@ public class MatchmakingService : IMatchmakingService
 
     if (gameServiceInstance is null)
     {
+        _metrics.RecordMatchCreationFailure();
+
         return null;
     }
 
-    var createMatchResponse =
-        await _gameServiceClient.CreateMatchAsync(
-            createMatchRequest,
-            gameServiceInstance.InternalUrl
-        );
+    CreateMatchResponse? createMatchResponse;
 
+    var stopwatch = Stopwatch.StartNew();
+
+    try
+    {
+        createMatchResponse =
+            await _gameServiceClient.CreateMatchAsync(
+                createMatchRequest,
+                gameServiceInstance.InternalUrl
+            );
+    }
+    catch
+    {
+        _metrics.RecordMatchCreationFailure();
+
+        throw;
+    }
+    finally
+    {
+        stopwatch.Stop();
+
+        _metrics.RecordMatchCreationLatency(
+            stopwatch.Elapsed.TotalMilliseconds
+        );
+    }
     if (createMatchResponse is null ||
         string.IsNullOrWhiteSpace(
             createMatchResponse.MatchId))
     {
+        _metrics.RecordMatchCreationFailure();
+
         return null;
     }
 
